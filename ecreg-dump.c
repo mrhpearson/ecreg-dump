@@ -18,7 +18,7 @@ int main(void)
 		printf("Unable to open %s\n", EC_SYSFS);
 		printf("Ensure that ec_sys module has been loaded with write support enabled\n");
 		printf("\tsudo modprobe ec_sys write_support=1\n");
-		return 0;
+		return 1;
 	}
 
 	/* Enable hidden registers - set offset 0x81 to 0x60 */
@@ -31,7 +31,7 @@ int main(void)
 	if (ret != EC_REG_SIZE) {
 		printf("Failed to read EC registers: err %d\n", ret);
 		fclose(fp);
-		return 0;
+		return 1;
 	}
 
 	for (i=0; i<EC_REG_SIZE; i++) {
@@ -42,5 +42,5 @@ int main(void)
 	printf("\n");
 
 	fclose(fp);
-	return 1;
+	return 0;
 }
