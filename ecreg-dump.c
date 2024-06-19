@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #define EC_SYSFS "/sys/kernel/debug/ec/ec0/io"
 #define EC_REG_SIZE 256
@@ -11,7 +12,11 @@ int main(void)
 
 	printf("EC register collector\n");
 
-	/* Check for sudo rights - TODO */
+	if (geteuid() != 0) {
+	    fprintf(stderr, "ecreg-dump must be run as root\n");
+		return 1;
+	}
+	
 	/* Open EC register access */
 	fp = fopen(EC_SYSFS, "r+");
 	if (!fp) {
