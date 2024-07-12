@@ -1,14 +1,58 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #define EC_SYSFS "/sys/kernel/debug/ec/ec0/io"
-#define EC_REG_SIZE 256
+#define EC_SIZE 256
+#define EC_REGION_SIZE 16
+
+unsigned char regions[] = {0x1, 0x2, 0x3, 0x8, 0x60};
+
+static int ec_set_region(FILE *fp, int region)
+{
+	int ret;
+
+	fseek(fp, 0x81, SEEK_SET);
+	return fputc(region, fp);
+}
+
+static int ec_read_and_dump(FILE *fp, int size, int offset)
+{
+	unsigned char *reg_data;
+	int i, ret;
+
+	reg_data = malloc(size);
+	if (!reg_data) {
+		printf("Memory not allocated (%d bytes)\n", size);
+		fclose(fp);
+		exit(0);
+	}
+	fseek(fp, offset, SEEK_SET);
+	ret = fread(reg_data, 1, size, fp);
+	if (ret != size) {
+		printf("Failed to read EC registers: err %d\n", ret);
+		free(reg_data);
+		fclose(fp);
+		exit(0);
+	}
+
+	for (i=0; i<size; i++) {
+		if (i % 16 == 0)
+			printf("%2.2x: ",offset+i);
+		printf("%2.2x ",reg_data[i]);
+		if ((i+1) % 16 == 0)
+			printf("\n");
+	}
+	printf("\n");
+	free(reg_data);
+	return 0;	
+}
 
 int main(void)
 {
-	unsigned char reg_data[EC_REG_SIZE];
+	unsigned char reg_data[EC_SIZE];
 	FILE *fp;
-	int i, ret;
+	int i, ret, reg;
 
 	printf("EC register collector\n");
 
@@ -26,25 +70,23 @@ int main(void)
 		return 1;
 	}
 
-	/* Enable hidden registers - set offset 0x81 to 0x60 */
-	fseek(fp, 0x81, SEEK_SET);
-	ret = fputc(0x60, fp);
-	fseek(fp, 0, SEEK_SET);
+	/* First dump default register set */
+	ret = ec_set_region(fp, 0);
+	if (ret < 0) {
+		printf("Unable to write to EC\n"); 
+		printf("Ensure that ec_sys module has been loaded with write support enabled\n");
+		printf("\tsudo modprobe ec_sys write_support=1\n");
+	}
 
 	/*Read in contents and dump */
-	ret = fread(reg_data, 1, EC_REG_SIZE, fp);
-	if (ret != EC_REG_SIZE) {
-		printf("Failed to read EC registers: err %d\n", ret);
-		fclose(fp);
-		return 1;
-	}
+	ec_read_and_dump(fp, EC_SIZE, 0);
 
-	for (i=0; i<EC_REG_SIZE; i++) {
-		if (i % 16 == 0)
-			printf("\n%2.2x: ",i);
-		printf("%2.2x ",reg_data[i]);
+	/* Now go through the dynamic regions */
+	for (reg=0; reg<sizeof(regions);reg++) {
+		printf("Dump EC region 0x%x\n", regions[reg]);
+		ec_set_region(fp, regions[reg]);
+		ec_read_and_dump(fp, EC_REGION_SIZE, 0xA0);
 	}
-	printf("\n");
 
 	fclose(fp);
 	return 0;
